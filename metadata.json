@@ -1,0 +1,6 @@
+{
+  "name": "ScribeTeX — Real-Time LaTeX Studio",
+  "description": "A real-time LaTeX document editor with live KaTeX preview, full custom symbol keyboard, deep customization, syntax highlighting, and Coal Black / Milk White themes.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}

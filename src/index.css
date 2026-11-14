@@ -1,0 +1,159 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+@import "katex/dist/katex.min.css";
+
+@layer base {
+  :root {
+    --font-ui: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-serif-doc: "Source Serif 4", "Lora", Georgia, serif;
+    --font-lora-doc: "Lora", Georgia, serif;
+    --font-mono-code: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+    /* Milk White Light Theme with Soft Grey Accents & High-Contrast Text */
+    --bg-canvas: #FAF9F6;
+    --bg-surface: #F2F0EB;
+    --bg-elevated: #E8E6E0;
+    --bg-hover: #DFDDD6;
+    --border-hairline: #D4D1C8;
+    --text-primary: #111113;
+    --text-secondary: #43434A;
+    --text-muted: #65656E;
+    --accent-primary: #27272A;
+    --accent-primary-hover: #111113;
+    --accent-primary-text: #FAF9F6;
+    --accent-subtle: #E4E2DC;
+    --accent-ring: #52525B;
+    --paper-bg: #FFFFFF;
+    --paper-text: #111113;
+    --paper-border: #D8D5CD;
+  }
+
+  .dark {
+    /* Coal Black Dark Theme with Vibrant Blue Accents */
+    --bg-canvas: #0B0C0E;
+    --bg-surface: #111317;
+    --bg-elevated: #171A21;
+    --bg-hover: #1E232D;
+    --border-hairline: #232834;
+    --text-primary: #F4F6FA;
+    --text-secondary: #A6B0C3;
+    --text-muted: #768196;
+    --accent-primary: #2563EB;
+    --accent-primary-hover: #3B82F6;
+    --accent-primary-text: #FFFFFF;
+    --accent-subtle: rgba(37, 99, 235, 0.16);
+    --accent-ring: #3B82F6;
+    --paper-bg: #12151B;
+    --paper-text: #EEF2F9;
+    --paper-border: #252B38;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+    font-family: var(--font-ui);
+    background-color: var(--bg-canvas);
+    color: var(--text-primary);
+  }
+}
+
+/* Custom sleek scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(128, 134, 148, 0.28);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(128, 134, 148, 0.48);
+}
+
+/* LaTeX Preview Document Typography */
+.latex-preview-doc {
+  line-height: 1.65;
+  overflow-wrap: break-word;
+}
+
+.latex-preview-doc h1,
+.latex-preview-doc h2,
+.latex-preview-doc h3,
+.latex-preview-doc h4 {
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  text-wrap: balance;
+}
+
+.latex-preview-doc .katex-display {
+  margin: 1.15em 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.25rem 0;
+}
+
+.latex-preview-doc .katex {
+  font-size: 1.05em;
+}
+
+.latex-preview-doc p + p {
+  margin-top: 0.85em;
+}
+
+.latex-preview-doc ul,
+.latex-preview-doc ol {
+  margin: 0.75em 0;
+  padding-left: 1.65em;
+}
+
+.latex-preview-doc ul {
+  list-style-type: disc;
+}
+
+.latex-preview-doc ol {
+  list-style-type: decimal;
+}
+
+.latex-preview-doc li + li {
+  margin-top: 0.3em;
+}
+
+.latex-preview-doc table {
+  border-collapse: collapse;
+  margin: 1.25em auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.latex-preview-doc blockquote {
+  margin: 1em 1.5em;
+  padding: 0.5em 1em;
+  font-style: italic;
+  opacity: 0.92;
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .latex-print-area,
+  .latex-print-area * {
+    visibility: visible;
+  }
+  .latex-print-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    background: #ffffff !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+}
