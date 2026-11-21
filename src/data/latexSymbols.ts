@@ -17,8 +17,76 @@ export const SYMBOL_CATEGORIES: SymbolCategoryMeta[] = [
   { id: 'accents', label: 'Accents & Fonts', shortLabel: 'Fonts' },
   { id: 'matrices', label: 'Delimiters & Matrices', shortLabel: 'Matrices' },
   { id: 'functions', label: 'Functions & Constants', shortLabel: 'Functions' },
-  { id: 'structure', label: 'Document & Environments', shortLabel: 'Structure' },
+  { id: 'mathblocks', label: 'Math Blocks & Environments', shortLabel: 'Math Blocks' },
+  { id: 'document', label: 'Document, Header & Sections', shortLabel: 'Document' },
 ];
+
+export const DEFAULT_SYMBOL_CATEGORY_ORDER: SymbolCategoryId[] = SYMBOL_CATEGORIES.map(
+  (c) => c.id
+);
+
+export function normalizeCategoryOrder(
+  savedOrder?: readonly SymbolCategoryId[] | null
+): SymbolCategoryId[] {
+  if (!Array.isArray(savedOrder) || savedOrder.length === 0) {
+    return [...DEFAULT_SYMBOL_CATEGORY_ORDER];
+  }
+  const validIds = new Set<SymbolCategoryId>(DEFAULT_SYMBOL_CATEGORY_ORDER);
+  const seen = new Set<SymbolCategoryId>();
+  const normalized: SymbolCategoryId[] = [];
+  for (const id of savedOrder) {
+    if (validIds.has(id) && !seen.has(id)) {
+      seen.add(id);
+      normalized.push(id);
+    }
+  }
+  for (const id of DEFAULT_SYMBOL_CATEGORY_ORDER) {
+    if (!seen.has(id)) {
+      seen.add(id);
+      normalized.push(id);
+    }
+  }
+  return normalized;
+}
+
+export function reorderCategoryOrder(
+  order: readonly SymbolCategoryId[],
+  draggedId: SymbolCategoryId,
+  targetId: SymbolCategoryId,
+  position: 'before' | 'after' = 'before'
+): SymbolCategoryId[] {
+  const normalized = normalizeCategoryOrder(order);
+  if (draggedId === targetId) return normalized;
+  const fromIdx = normalized.indexOf(draggedId);
+  const targetIdx = normalized.indexOf(targetId);
+  if (fromIdx === -1 || targetIdx === -1) return normalized;
+
+  const next = [...normalized];
+  next.splice(fromIdx, 1);
+  const adjustedTargetIdx = next.indexOf(targetId);
+  const insertIdx = position === 'after' ? adjustedTargetIdx + 1 : adjustedTargetIdx;
+  next.splice(insertIdx, 0, draggedId);
+  return next;
+}
+
+export const BLOCK_CREATOR_SYMBOL_IDS = new Set<string>([
+  'maketitle',
+  'displayMath',
+  'equation',
+  'align',
+  'section',
+  'subsection',
+  'subsubsection',
+  'itemize',
+  'enumerate',
+  'tabular',
+  'theorem',
+  'definition',
+  'proof',
+  'abstract',
+  'toc',
+  'newpage',
+]);
 
 export const LATEX_SYMBOLS: SymbolItem[] = [
   // ================= GREEK LETTERS =================
@@ -262,31 +330,34 @@ export const LATEX_SYMBOLS: SymbolItem[] = [
   { id: 'aleph', label: 'aleph', command: '\\aleph', snippet: '\\aleph', previewLatex: '\\aleph', category: 'functions', keywords: ['cardinal', 'infinity'], description: 'Aleph cardinal' },
   { id: 'wp', label: 'wp', command: '\\wp', snippet: '\\wp', previewLatex: '\\wp', category: 'functions', keywords: ['weierstrass'], description: 'Weierstrass p' },
 
-  // ================= DOCUMENT & STRUCTURE =================
-  { id: 'inlineMath', label: '$ ... $', command: '$...$', snippet: '$$0$', previewText: '$x$', category: 'structure', keywords: ['inline math', 'dollar'], description: 'Inline math delimiters' },
-  { id: 'displayMath', label: '$$ ... $$', command: '\\[ ... \\]', snippet: '\\[\n  $0\n\\]', previewText: '[…]', category: 'structure', keywords: ['display math', 'equation'], description: 'Display math block' },
-  { id: 'equation', label: 'equation', command: '\\begin{equation}', snippet: '\\begin{equation}\n  $0\n\\end{equation}', previewText: '(1)', category: 'structure', keywords: ['equation', 'numbered'], description: 'Numbered equation environment' },
-  { id: 'align', label: 'align', command: '\\begin{align}', snippet: '\\begin{align}\n  $0a &= b \\\\\n  c &= d\n\\end{align}', previewText: 'a=b', category: 'structure', keywords: ['align', 'multi-line'], description: 'Aligned equations' },
+  // ================= DOCUMENT & PAGE STRUCTURE =================
+  { id: 'maketitle', label: 'header', command: '\\maketitle', snippet: '\\maketitle', previewText: 'Title', category: 'structure', keywords: ['header', 'title', 'maketitle', 'author', 'date'], description: 'Document Header (Title, Description & Date)' },
   { id: 'section', label: 'section', command: '\\section{}', snippet: '\\section{$0}', previewText: '§ 1', category: 'structure', keywords: ['heading', 'section'], description: 'Section heading' },
   { id: 'subsection', label: 'subsection', command: '\\subsection{}', snippet: '\\subsection{$0}', previewText: '§ 1.1', category: 'structure', keywords: ['heading', 'subsection'], description: 'Subsection heading' },
   { id: 'subsubsection', label: 'subsub', command: '\\subsubsection{}', snippet: '\\subsubsection{$0}', previewText: '§ 1.1.1', category: 'structure', keywords: ['heading', 'subsubsection'], description: 'Subsubsection heading' },
+  { id: 'abstract', label: 'abstract', command: '\\begin{abstract}', snippet: '\\begin{abstract}\n  $0\n\\end{abstract}', previewText: 'Abs', category: 'structure', keywords: ['abstract', 'summary'], description: 'Abstract block' },
+  { id: 'toc', label: 'ToC', command: '\\tableofcontents', snippet: '\\tableofcontents', previewText: '≡', category: 'structure', keywords: ['table of contents'], description: 'Insert Table of Contents' },
+  { id: 'newpage', label: 'newpage', command: '\\newpage', snippet: '\\newpage', previewText: '⏎', category: 'structure', keywords: ['page break'], description: 'Page break' },
+  { id: 'itemize', label: 'itemize', command: '\\begin{itemize}', snippet: '\\begin{itemize}\n  \\item $0\n  \\item \n\\end{itemize}', previewText: '•', category: 'structure', keywords: ['bullet list', 'itemize'], description: 'Bulleted list' },
+  { id: 'enumerate', label: 'enumerate', command: '\\begin{enumerate}', snippet: '\\begin{enumerate}\n  \\item $0\n  \\item \n\\end{enumerate}', previewText: '1.', category: 'structure', keywords: ['numbered list', 'enumerate'], description: 'Numbered list' },
+  { id: 'tabular', label: 'table', command: '\\begin{tabular}', snippet: '\\begin{tabular}{l c r}\n  \\hline\n  $0Header 1 & Header 2 & Header 3 \\\\\n  \\hline\n  Cell 1 & Cell 2 & Cell 3 \\\\\n  \\hline\n\\end{tabular}', previewText: '⊞', category: 'structure', keywords: ['table', 'tabular', 'grid'], description: 'Tabular grid' },
   { id: 'textbf', label: 'bold', command: '\\textbf{}', snippet: '\\textbf{$0}', previewText: 'B', category: 'structure', keywords: ['bold', 'strong'], description: 'Bold text' },
   { id: 'textit', label: 'italic', command: '\\textit{}', snippet: '\\textit{$0}', previewText: 'I', category: 'structure', keywords: ['italic', 'emphasis'], description: 'Italic text' },
   { id: 'texttt', label: 'mono', command: '\\texttt{}', snippet: '\\texttt{$0}', previewText: 'TT', category: 'structure', keywords: ['monospace', 'code'], description: 'Monospace text' },
   { id: 'underline', label: 'underline', command: '\\underline{}', snippet: '\\underline{$0}', previewText: 'U̲', category: 'structure', keywords: ['underline'], description: 'Underlined text' },
   { id: 'textcolor', label: 'color', command: '\\textcolor{blue}{}', snippet: '\\textcolor{blue}{$0}', previewText: 'A', category: 'structure', keywords: ['color', 'highlight'], description: 'Colored text' },
-  { id: 'itemize', label: 'itemize', command: '\\begin{itemize}', snippet: '\\begin{itemize}\n  \\item $0\n  \\item \n\\end{itemize}', previewText: '•', category: 'structure', keywords: ['bullet list', 'itemize'], description: 'Bulleted list' },
-  { id: 'enumerate', label: 'enumerate', command: '\\begin{enumerate}', snippet: '\\begin{enumerate}\n  \\item $0\n  \\item \n\\end{enumerate}', previewText: '1.', category: 'structure', keywords: ['numbered list', 'enumerate'], description: 'Numbered list' },
-  { id: 'tabular', label: 'table', command: '\\begin{tabular}', snippet: '\\begin{tabular}{l c r}\n  \\hline\n  $0Header 1 & Header 2 & Header 3 \\\\\n  \\hline\n  Cell 1 & Cell 2 & Cell 3 \\\\\n  \\hline\n\\end{tabular}', previewText: '⊞', category: 'structure', keywords: ['table', 'tabular', 'grid'], description: 'Tabular grid' },
-  { id: 'theorem', label: 'theorem', command: '\\begin{theorem}', snippet: '\\begin{theorem}[Title]\n  $0\n\\end{theorem}', previewText: 'Thm', category: 'structure', keywords: ['theorem', 'math block'], description: 'Theorem environment' },
-  { id: 'definition', label: 'definition', command: '\\begin{definition}', snippet: '\\begin{definition}[Term]\n  $0\n\\end{definition}', previewText: 'Def', category: 'structure', keywords: ['definition'], description: 'Definition environment' },
-  { id: 'proof', label: 'proof', command: '\\begin{proof}', snippet: '\\begin{proof}\n  $0\n\\end{proof}', previewText: '□', category: 'structure', keywords: ['proof', 'qed'], description: 'Proof environment with QED' },
-  { id: 'abstract', label: 'abstract', command: '\\begin{abstract}', snippet: '\\begin{abstract}\n  $0\n\\end{abstract}', previewText: 'Abs', category: 'structure', keywords: ['abstract', 'summary'], description: 'Abstract block' },
-  { id: 'footnote', label: 'footnote', command: '\\footnote{}', snippet: '\\footnote{$0}', previewText: 'fn¹', category: 'structure', keywords: ['footnote', 'note'], description: 'Footnote' },
+  { id: 'footnote', label: 'footnote', command: '\\footnote{}', snippet: '\\footnote{$0}', previewText: 'fn¹', category: 'structure', keywords: ['footnote', 'note', 'footer'], description: 'Footnote (bottom of page)' },
   { id: 'href', label: 'link', command: '\\href{url}{text}', snippet: '\\href{https://$0}{Link Text}', previewText: '🔗', category: 'structure', keywords: ['url', 'hyperlink'], description: 'Hyperlink' },
   { id: 'label', label: 'label', command: '\\label{}', snippet: '\\label{$0}', previewText: '🏷', category: 'structure', keywords: ['label', 'anchor'], description: 'Reference label' },
-  { id: 'eqref', label: 'eqref', command: '\\eqref{}', snippet: '\\eqref{$0}', previewText: '(ref)', category: 'structure', keywords: ['reference', 'equation'], description: 'Equation reference' },
   { id: 'cite', label: 'cite', command: '\\cite{}', snippet: '\\cite{$0}', previewText: '[1]', category: 'structure', keywords: ['citation', 'bibliography'], description: 'Citation' },
-  { id: 'toc', label: 'ToC', command: '\\tableofcontents', snippet: '\\tableofcontents', previewText: '≡', category: 'structure', keywords: ['table of contents'], description: 'Insert Table of Contents' },
-  { id: 'newpage', label: 'newpage', command: '\\newpage', snippet: '\\newpage', previewText: '⏎', category: 'structure', keywords: ['page break'], description: 'Page break' },
+
+  // ================= MATH BLOCKS & ENVIRONMENTS =================
+  { id: 'inlineMath', label: '$ ... $', command: '$...$', snippet: '$$0$', previewText: '$x$', category: 'mathblocks', keywords: ['inline math', 'dollar'], description: 'Inline math delimiters' },
+  { id: 'displayMath', label: '$$ ... $$', command: '\\[ ... \\]', snippet: '\\[\n  $0\n\\]', previewText: '[…]', category: 'mathblocks', keywords: ['display math', 'equation'], description: 'Display math block' },
+  { id: 'equation', label: 'equation', command: '\\begin{equation}', snippet: '\\begin{equation}\n  $0\n\\end{equation}', previewText: '(1)', category: 'mathblocks', keywords: ['equation', 'numbered'], description: 'Numbered equation environment' },
+  { id: 'align', label: 'align', command: '\\begin{align}', snippet: '\\begin{align}\n  $0a &= b \\\\\n  c &= d\n\\end{align}', previewText: 'a=b', category: 'mathblocks', keywords: ['align', 'multi-line'], description: 'Aligned equations' },
+  { id: 'theorem', label: 'theorem', command: '\\begin{theorem}', snippet: '\\begin{theorem}[Title]\n  $0\n\\end{theorem}', previewText: 'Thm', category: 'mathblocks', keywords: ['theorem', 'math block'], description: 'Theorem environment' },
+  { id: 'definition', label: 'definition', command: '\\begin{definition}', snippet: '\\begin{definition}[Term]\n  $0\n\\end{definition}', previewText: 'Def', category: 'mathblocks', keywords: ['definition'], description: 'Definition environment' },
+  { id: 'proof', label: 'proof', command: '\\begin{proof}', snippet: '\\begin{proof}\n  $0\n\\end{proof}', previewText: '□', category: 'mathblocks', keywords: ['proof', 'qed'], description: 'Proof environment with QED' },
+  { id: 'eqref', label: 'eqref', command: '\\eqref{}', snippet: '\\eqref{$0}', previewText: '(ref)', category: 'mathblocks', keywords: ['reference', 'equation'], description: 'Equation reference' },
 ];

@@ -1,5 +1,11 @@
 import katex from 'katex';
-import type { CompileDiagnostic, OutlineHeading, ParsedLaTeXResult } from '../types/editor';
+import type {
+  CompileDiagnostic,
+  OutlineHeading,
+  ParsedLaTeXResult,
+  PreviewBlock,
+  PreviewBlockKind,
+} from '../types/editor';
 
 export interface ParseOptions {
   equationNumbering?: boolean;
@@ -75,6 +81,46 @@ export function stripComments(source: string): string {
         out += ch;
       }
       return out;
+    })
+    .join('\n');
+}
+
+/**
+ * Masks unescaped % line comments with spaces of identical length so every
+ * character offset in the masked string maps 1-to-1 to rawSource.
+ */
+export function maskCommentsPreserveLength(source: string): string {
+  const lines = source.split('\n');
+  let inVerbatim = false;
+
+  return lines
+    .map((line) => {
+      if (/\\begin\{(verbatim|lstlisting|minted)\}/.test(line)) {
+        inVerbatim = true;
+        return line;
+      }
+      if (/\\end\{(verbatim|lstlisting|minted)\}/.test(line)) {
+        inVerbatim = false;
+        return line;
+      }
+      if (inVerbatim) return line;
+
+      let escaped = false;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (escaped) {
+          escaped = false;
+          continue;
+        }
+        if (ch === '\\') {
+          escaped = true;
+          continue;
+        }
+        if (ch === '%') {
+          return line.slice(0, i) + ' '.repeat(line.length - i);
+        }
+      }
+      return line;
     })
     .join('\n');
 }
@@ -255,12 +301,14 @@ function renderKatexSafe(
 }
 
 interface RenderContext {
+  rawSource: string;
   macros: Record<string, string>;
   diagnostics: CompileDiagnostic[];
   labels: Map<string, string>;
   citations: Map<string, number>;
   footnotes: string[];
   outline: OutlineHeading[];
+  blocks: PreviewBlock[];
   sectionCounters: [number, number, number];
   equationCounter: number;
   theoremCounters: Record<string, number>;
@@ -468,7 +516,7 @@ function renderInline(text: string, ctx: RenderContext): string {
           if (arg) {
             ctx.footnotes.push(renderInline(arg.value, ctx));
             const num = ctx.footnotes.length;
-            out += `<sup class="text-zinc-900 dark:text-blue-400 font-semibold">[${num}]</sup>`;
+            out += `<sup data-latex-atom="true" class="text-zinc-900 dark:text-blue-400 font-semibold">[${num}]</sup>`;
             i = arg.nextIdx;
             continue;
           }
@@ -488,7 +536,7 @@ function renderInline(text: string, ctx: RenderContext): string {
             const key = arg.value.trim();
             const resolved = ctx.labels.get(key) || '?';
             const display = cmd === 'eqref' ? `(${resolved})` : resolved;
-            out += `<a href="#label-${escapeHtml(key)}" class="text-zinc-900 underline decoration-zinc-400 dark:no-underline dark:text-blue-400 hover:underline font-medium">${escapeHtml(display)}</a>`;
+            out += `<a data-latex-atom="true" href="#label-${escapeHtml(key)}" class="text-zinc-900 underline decoration-zinc-400 dark:no-underline dark:text-blue-400 hover:underline font-medium">${escapeHtml(display)}</a>`;
             i = arg.nextIdx;
             continue;
           }
@@ -503,27 +551,27 @@ function renderInline(text: string, ctx: RenderContext): string {
               }
               return ctx.citations.get(k);
             });
-            out += `<span class="text-zinc-900 dark:text-blue-400 font-medium">[${nums.join(', ')}]</span>`;
+            out += `<span data-latex-atom="true" class="text-zinc-900 dark:text-blue-400 font-medium">[${nums.join(', ')}]</span>`;
             i = arg.nextIdx;
             continue;
           }
         }
         if (cmd === 'LaTeX') {
-          out += '<span class="font-serif tracking-tight">L<sup style="font-size:0.75em;margin-left:-0.15em">A</sup>T<sub style="font-size:0.8em;margin-left:-0.12em">E</sub>X</span>';
+          out += '<span data-latex-atom="true" class="font-serif tracking-tight">L<sup style="font-size:0.75em;margin-left:-0.15em">A</sup>T<sub style="font-size:0.8em;margin-left:-0.12em">E</sub>X</span>';
           i = afterCmd;
           continue;
         }
         if (cmd === 'TeX') {
-          out += '<span class="font-serif tracking-tight">T<sub style="font-size:0.8em;margin-left:-0.12em">E</sub>X</span>';
+          out += '<span data-latex-atom="true" class="font-serif tracking-tight">T<sub style="font-size:0.8em;margin-left:-0.12em">E</sub>X</span>';
           i = afterCmd;
           continue;
         }
         if (cmd === 'today') {
-          out += new Date().toLocaleDateString('en-US', {
+          out += `<span data-latex-atom="true">${new Date().toLocaleDateString('en-US', {
             year: 'numeric',
             month: 'long',
             day: 'numeric',
-          });
+          })}</span>`;
           i = afterCmd;
           continue;
         }
@@ -834,11 +882,83 @@ function preScanLabels(body: string, ctx: RenderContext): void {
   }
 }
 
-function renderBlock(body: string, ctx: RenderContext, inlineSingleParagraph = false): string {
+function getEnvironmentDisplayLabel(envName: string): string {
+  const clean = envName.replace(/\*$/, '');
+  const labels: Record<string, string> = {
+    equation: 'Equation',
+    align: 'Aligned Equations',
+    gather: 'Gathered Equations',
+    multline: 'Multiline Equation',
+    flalign: 'Aligned Equations',
+    alignat: 'Aligned Equations',
+    eqnarray: 'Equation Array',
+    abstract: 'Abstract',
+    itemize: 'Bulleted List',
+    enumerate: 'Numbered List',
+    description: 'Description List',
+    tabular: 'Table',
+    table: 'Table',
+    figure: 'Figure',
+    center: 'Centered Block',
+    flushleft: 'Left-Aligned Block',
+    flushright: 'Right-Aligned Block',
+    quote: 'Quote',
+    quotation: 'Quotation',
+    verse: 'Verse',
+    verbatim: 'Verbatim Code',
+    lstlisting: 'Code Listing',
+    minted: 'Code Listing',
+    theorem: 'Theorem',
+    lemma: 'Lemma',
+    proposition: 'Proposition',
+    corollary: 'Corollary',
+    definition: 'Definition',
+    remark: 'Remark',
+    example: 'Example',
+    proof: 'Proof',
+    thebibliography: 'References',
+  };
+  return labels[clean] || clean.charAt(0).toUpperCase() + clean.slice(1);
+}
+
+function pushPreviewBlock(
+  ctx: RenderContext,
+  collectBlocks: boolean,
+  bodyStartOffset: number,
+  blockStartInBody: number,
+  blockEndInBody: number,
+  kind: PreviewBlockKind,
+  label: string,
+  html: string,
+  headingId?: string
+): void {
+  if (!collectBlocks) return;
+  const startOffset = bodyStartOffset + blockStartInBody;
+  const endOffset = bodyStartOffset + blockEndInBody;
+  ctx.blocks.push({
+    id: `block-${ctx.blocks.length + 1}`,
+    kind,
+    label,
+    html,
+    startOffset,
+    endOffset,
+    rawLatex: ctx.rawSource.slice(startOffset, endOffset),
+    headingId,
+  });
+}
+
+function renderBlock(
+  body: string,
+  ctx: RenderContext,
+  inlineSingleParagraph = false,
+  bodyStartOffset = 0,
+  collectBlocks = false
+): string {
   const chunks: string[] = [];
   let cursor = 0;
 
   while (cursor < body.length) {
+    const blockStart = cursor;
     // Check for \begin{...}
     const envMatch = body.slice(cursor).match(/^\\begin\{([a-zA-Z0-9*]+)\}/);
     if (envMatch) {
@@ -868,32 +988,75 @@ function renderBlock(body: string, ctx: RenderContext, inlineSingleParagraph = f
               ctx.labels.set(labelMatch[1].trim(), `${num}`);
             }
             const anchorId = labelMatch ? ` id="label-${escapeHtml(labelMatch[1].trim())}"` : '';
-            eqNumberHtml = `<span${anchorId} class="text-xs font-mono tabular-nums opacity-65 select-none shrink-0 ml-4">(${num})</span>`;
+            eqNumberHtml = `<span${anchorId} data-preview-chrome="true" class="text-xs font-mono tabular-nums opacity-65 select-none shrink-0 ml-4">(${num})</span>`;
           }
 
           const mathHtml = renderKatexSafe(wrapped, true, ctx.macros, ctx.diagnostics);
-          chunks.push(
-            `<div class="flex items-center justify-between gap-4 my-4"><div class="flex-1 min-w-0 overflow-x-auto">${mathHtml}</div>${eqNumberHtml}</div>`
+          const blockHtml = `<div class="flex items-center justify-between gap-4 my-4"><div class="flex-1 min-w-0 overflow-x-auto">${mathHtml}</div>${eqNumberHtml}</div>`;
+          chunks.push(blockHtml);
+          pushPreviewBlock(
+            ctx,
+            collectBlocks,
+            bodyStartOffset,
+            blockStart,
+            cursor,
+            'math',
+            getEnvironmentDisplayLabel(envName),
+            blockHtml
           );
           continue;
         }
 
         if (envName === 'abstract') {
-          chunks.push(
-            `<section class="my-6 px-6 py-4 rounded-lg border border-black/10 dark:border-white/10 bg-black/[0.02] dark:bg-white/[0.02]"><div class="text-center text-xs font-semibold tracking-wider uppercase opacity-70 mb-2">Abstract</div><div class="text-[0.94em] leading-relaxed">${renderBlock(innerRaw.trim(), ctx)}</div></section>`
+          const blockHtml = `<section class="my-6 px-6 py-4 rounded-lg border border-black/10 dark:border-white/10 bg-black/[0.02] dark:bg-white/[0.02]"><div data-preview-chrome="true" class="text-center text-xs font-semibold tracking-wider uppercase opacity-70 mb-2">Abstract</div><div class="text-[0.94em] leading-relaxed">${renderBlock(innerRaw.trim(), ctx)}</div></section>`;
+          chunks.push(blockHtml);
+          pushPreviewBlock(
+            ctx,
+            collectBlocks,
+            bodyStartOffset,
+            blockStart,
+            cursor,
+            'environment',
+            'Abstract',
+            blockHtml
           );
           continue;
         }
 
         if (envName === 'itemize' || envName === 'enumerate' || envName === 'description') {
-          chunks.push(
-            renderList(innerRaw, envName === 'enumerate', envName === 'description', ctx)
+          const blockHtml = renderList(
+            innerRaw,
+            envName === 'enumerate',
+            envName === 'description',
+            ctx
+          );
+          chunks.push(blockHtml);
+          pushPreviewBlock(
+            ctx,
+            collectBlocks,
+            bodyStartOffset,
+            blockStart,
+            cursor,
+            'environment',
+            getEnvironmentDisplayLabel(envName),
+            blockHtml
           );
           continue;
         }
 
         if (envName === 'tabular') {
-          chunks.push(renderTabular(innerRaw, ctx));
+          const blockHtml = renderTabular(innerRaw, ctx);
+          chunks.push(blockHtml);
+          pushPreviewBlock(
+            ctx,
+            collectBlocks,
+            bodyStartOffset,
+            blockStart,
+            cursor,
+            'environment',
+            'Table',
+            blockHtml
+          );
           continue;
         }
 
@@ -915,33 +1078,95 @@ function renderBlock(body: string, ctx: RenderContext, inlineSingleParagraph = f
               '<div class="mx-auto my-3 max-w-md rounded border border-dashed border-black/25 dark:border-white/25 p-6 text-center text-xs font-mono opacity-75">Figure Asset: $1</div>'
             );
           }
-          chunks.push(`<figure class="my-6">${renderBlock(inner.trim(), ctx)}${captionHtml}</figure>`);
+          const blockHtml = `<figure class="my-6">${renderBlock(inner.trim(), ctx)}${captionHtml}</figure>`;
+          chunks.push(blockHtml);
+          pushPreviewBlock(
+            ctx,
+            collectBlocks,
+            bodyStartOffset,
+            blockStart,
+            cursor,
+            'environment',
+            getEnvironmentDisplayLabel(envName),
+            blockHtml
+          );
           continue;
         }
 
         if (envName === 'center') {
-          chunks.push(`<div class="text-center my-4">${renderBlock(innerRaw.trim(), ctx)}</div>`);
+          const blockHtml = `<div class="text-center my-4">${renderBlock(innerRaw.trim(), ctx)}</div>`;
+          chunks.push(blockHtml);
+          pushPreviewBlock(
+            ctx,
+            collectBlocks,
+            bodyStartOffset,
+            blockStart,
+            cursor,
+            'environment',
+            'Centered Block',
+            blockHtml
+          );
           continue;
         }
         if (envName === 'flushleft') {
-          chunks.push(`<div class="text-left my-4">${renderBlock(innerRaw.trim(), ctx)}</div>`);
+          const blockHtml = `<div class="text-left my-4">${renderBlock(innerRaw.trim(), ctx)}</div>`;
+          chunks.push(blockHtml);
+          pushPreviewBlock(
+            ctx,
+            collectBlocks,
+            bodyStartOffset,
+            blockStart,
+            cursor,
+            'environment',
+            'Left-Aligned Block',
+            blockHtml
+          );
           continue;
         }
         if (envName === 'flushright') {
-          chunks.push(`<div class="text-right my-4">${renderBlock(innerRaw.trim(), ctx)}</div>`);
+          const blockHtml = `<div class="text-right my-4">${renderBlock(innerRaw.trim(), ctx)}</div>`;
+          chunks.push(blockHtml);
+          pushPreviewBlock(
+            ctx,
+            collectBlocks,
+            bodyStartOffset,
+            blockStart,
+            cursor,
+            'environment',
+            'Right-Aligned Block',
+            blockHtml
+          );
           continue;
         }
 
         if (envName === 'quote' || envName === 'quotation' || envName === 'verse') {
-          chunks.push(
-            `<blockquote class="my-4 px-5 py-3 rounded-md bg-black/[0.03] dark:bg-white/[0.03] border border-black/10 dark:border-white/10 italic">${renderBlock(innerRaw.trim(), ctx)}</blockquote>`
+          const blockHtml = `<blockquote class="my-4 px-5 py-3 rounded-md bg-black/[0.03] dark:bg-white/[0.03] border border-black/10 dark:border-white/10 italic">${renderBlock(innerRaw.trim(), ctx)}</blockquote>`;
+          chunks.push(blockHtml);
+          pushPreviewBlock(
+            ctx,
+            collectBlocks,
+            bodyStartOffset,
+            blockStart,
+            cursor,
+            'environment',
+            getEnvironmentDisplayLabel(envName),
+            blockHtml
           );
           continue;
         }
 
         if (envName === 'verbatim' || envName === 'lstlisting' || envName === 'minted') {
-          chunks.push(
-            `<pre class="my-4 p-4 rounded-md bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 font-mono text-[0.86em] overflow-x-auto leading-relaxed"><code>${escapeHtml(innerRaw.replace(/^\n/, ''))}</code></pre>`
+          const blockHtml = `<pre class="my-4 p-4 rounded-md bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 font-mono text-[0.86em] overflow-x-auto leading-relaxed"><code>${escapeHtml(innerRaw.replace(/^\n/, ''))}</code></pre>`;
+          chunks.push(blockHtml);
+          pushPreviewBlock(
+            ctx,
+            collectBlocks,
+            bodyStartOffset,
+            blockStart,
+            cursor,
+            'environment',
+            getEnvironmentDisplayLabel(envName),
+            blockHtml
           );
           continue;
         }
@@ -958,8 +1183,17 @@ function renderBlock(body: string, ctx: RenderContext, inlineSingleParagraph = f
           }
           ctx.theoremCounters[envName] = (ctx.theoremCounters[envName] || 0) + 1;
           const num = ctx.theoremCounters[envName];
-          chunks.push(
-            `<div class="my-5 px-4 py-3.5 rounded-lg border border-black/12 dark:border-white/12 bg-black/[0.02] dark:bg-white/[0.025]"><div class="font-semibold mb-1.5">${THEOREM_TITLES[envName]} ${num}${subtitle}.</div><div class="${envName === 'definition' || envName === 'remark' || envName === 'example' ? '' : 'italic'}">${renderBlock(trimmed, ctx)}</div></div>`
+          const blockHtml = `<div class="my-5 px-4 py-3.5 rounded-lg border border-black/12 dark:border-white/12 bg-black/[0.02] dark:bg-white/[0.025]"><div data-preview-chrome="true" class="font-semibold mb-1.5">${THEOREM_TITLES[envName]} ${num}${subtitle}.</div><div class="${envName === 'definition' || envName === 'remark' || envName === 'example' ? '' : 'italic'}">${renderBlock(trimmed, ctx)}</div></div>`;
+          chunks.push(blockHtml);
+          pushPreviewBlock(
+            ctx,
+            collectBlocks,
+            bodyStartOffset,
+            blockStart,
+            cursor,
+            'environment',
+            THEOREM_TITLES[envName],
+            blockHtml
           );
           continue;
         }
@@ -974,8 +1208,17 @@ function renderBlock(body: string, ctx: RenderContext, inlineSingleParagraph = f
               trimmed = trimmed.slice(opt.nextIdx).trim();
             }
           }
-          chunks.push(
-            `<div class="my-4"><span class="italic font-semibold mr-1.5">${title}. </span>${renderBlock(trimmed, ctx, true)} <span class="inline-block ml-2 float-right font-mono select-none" aria-label="QED">□</span><div class="clear-both"></div></div>`
+          const blockHtml = `<div class="my-4"><span data-preview-chrome="true" class="italic font-semibold mr-1.5">${title}. </span>${renderBlock(trimmed, ctx, true)} <span data-preview-chrome="true" class="inline-block ml-2 float-right font-mono select-none" aria-label="QED">□</span><div class="clear-both"></div></div>`;
+          chunks.push(blockHtml);
+          pushPreviewBlock(
+            ctx,
+            collectBlocks,
+            bodyStartOffset,
+            blockStart,
+            cursor,
+            'environment',
+            'Proof',
+            blockHtml
           );
           continue;
         }
@@ -993,11 +1236,32 @@ function renderBlock(body: string, ctx: RenderContext, inlineSingleParagraph = f
           }
           bibHtml += '</ol></section>';
           chunks.push(bibHtml);
+          pushPreviewBlock(
+            ctx,
+            collectBlocks,
+            bodyStartOffset,
+            blockStart,
+            cursor,
+            'environment',
+            'References',
+            bibHtml
+          );
           continue;
         }
 
         // Generic fallback environment
-        chunks.push(`<div>${renderBlock(innerRaw.trim(), ctx)}</div>`);
+        const fallbackHtml = `<div>${renderBlock(innerRaw.trim(), ctx)}</div>`;
+        chunks.push(fallbackHtml);
+        pushPreviewBlock(
+          ctx,
+          collectBlocks,
+          bodyStartOffset,
+          blockStart,
+          cursor,
+          'environment',
+          getEnvironmentDisplayLabel(envName),
+          fallbackHtml
+        );
         continue;
       }
     }
@@ -1007,10 +1271,19 @@ function renderBlock(body: string, ctx: RenderContext, inlineSingleParagraph = f
       const closeIdx = body.indexOf('$$', cursor + 2);
       if (closeIdx !== -1) {
         const math = body.slice(cursor + 2, closeIdx);
-        chunks.push(
-          `<div class="my-4 overflow-x-auto">${renderKatexSafe(math, true, ctx.macros, ctx.diagnostics)}</div>`
-        );
+        const blockHtml = `<div class="my-4 overflow-x-auto">${renderKatexSafe(math, true, ctx.macros, ctx.diagnostics)}</div>`;
+        chunks.push(blockHtml);
         cursor = closeIdx + 2;
+        pushPreviewBlock(
+          ctx,
+          collectBlocks,
+          bodyStartOffset,
+          blockStart,
+          cursor,
+          'math',
+          'Display Math',
+          blockHtml
+        );
         continue;
       }
     }
@@ -1020,10 +1293,19 @@ function renderBlock(body: string, ctx: RenderContext, inlineSingleParagraph = f
       const closeIdx = body.indexOf('\\]', cursor + 2);
       if (closeIdx !== -1) {
         const math = body.slice(cursor + 2, closeIdx);
-        chunks.push(
-          `<div class="my-4 overflow-x-auto">${renderKatexSafe(math, true, ctx.macros, ctx.diagnostics)}</div>`
-        );
+        const blockHtml = `<div class="my-4 overflow-x-auto">${renderKatexSafe(math, true, ctx.macros, ctx.diagnostics)}</div>`;
+        chunks.push(blockHtml);
         cursor = closeIdx + 2;
+        pushPreviewBlock(
+          ctx,
+          collectBlocks,
+          bodyStartOffset,
+          blockStart,
+          cursor,
+          'math',
+          'Display Math',
+          blockHtml
+        );
         continue;
       }
     }
@@ -1075,19 +1357,37 @@ function renderBlock(body: string, ctx: RenderContext, inlineSingleParagraph = f
         }
 
         const renderedTitle = renderInline(arg.value, ctx);
-        const prefix = numLabel ? `<span class="mr-2 tabular-nums opacity-75">${numLabel} </span>` : '';
+        const prefix = numLabel ? `<span data-preview-chrome="true" class="mr-2 tabular-nums opacity-75">${numLabel} </span>` : '';
 
+        let headingHtml = '';
         if (type === 'section') {
-          chunks.push(
-            `<h2 id="${headingId}" class="text-[1.4em] font-bold mt-8 mb-3 pb-1 border-b border-black/10 dark:border-white/10">${prefix}${renderedTitle}</h2>`
-          );
+          headingHtml = `<h2 id="${headingId}" class="text-[1.4em] font-bold mt-8 mb-3 pb-1 border-b border-black/10 dark:border-white/10">${prefix}${renderedTitle}</h2>`;
         } else if (type === 'subsection') {
-          chunks.push(`<h3 id="${headingId}" class="text-[1.18em] font-semibold mt-6 mb-2">${prefix}${renderedTitle}</h3>`);
+          headingHtml = `<h3 id="${headingId}" class="text-[1.18em] font-semibold mt-6 mb-2">${prefix}${renderedTitle}</h3>`;
         } else if (type === 'subsubsection') {
-          chunks.push(`<h4 id="${headingId}" class="text-[1.04em] font-semibold mt-4 mb-1.5">${prefix}${renderedTitle}</h4>`);
+          headingHtml = `<h4 id="${headingId}" class="text-[1.04em] font-semibold mt-4 mb-1.5">${prefix}${renderedTitle}</h4>`;
         } else {
-          chunks.push(`<p class="mt-3"><strong class="mr-2">${renderedTitle}</strong></p>`);
+          headingHtml = `<p class="mt-3"><strong class="mr-2">${renderedTitle}</strong></p>`;
         }
+
+        const headingLabelMap: Record<string, string> = {
+          section: 'Section',
+          subsection: 'Subsection',
+          subsubsection: 'Subsubsection',
+          paragraph: 'Paragraph Heading',
+        };
+        chunks.push(headingHtml);
+        pushPreviewBlock(
+          ctx,
+          collectBlocks,
+          bodyStartOffset,
+          blockStart,
+          cursor,
+          'heading',
+          headingLabelMap[type] || 'Heading',
+          headingHtml,
+          level <= 3 ? headingId : undefined
+        );
         continue;
       }
     }
@@ -1096,28 +1396,69 @@ function renderBlock(body: string, ctx: RenderContext, inlineSingleParagraph = f
     if (body.startsWith('\\maketitle', cursor)) {
       cursor += '\\maketitle'.length;
       chunks.push('__SCRIBETEX_MAKETITLE__');
+      pushPreviewBlock(
+        ctx,
+        collectBlocks,
+        bodyStartOffset,
+        blockStart,
+        cursor,
+        'title',
+        'Document Header',
+        '__SCRIBETEX_MAKETITLE__'
+      );
       continue;
     }
     if (body.startsWith('\\tableofcontents', cursor)) {
       cursor += '\\tableofcontents'.length;
       chunks.push('__SCRIBETEX_TOC__');
+      pushPreviewBlock(
+        ctx,
+        collectBlocks,
+        bodyStartOffset,
+        blockStart,
+        cursor,
+        'toc',
+        'Table of Contents',
+        '__SCRIBETEX_TOC__'
+      );
       continue;
     }
     if (body.startsWith('\\newpage', cursor) || body.startsWith('\\clearpage', cursor)) {
       const len = body.startsWith('\\newpage', cursor) ? '\\newpage'.length : '\\clearpage'.length;
       cursor += len;
-      chunks.push(
-        '<div class="my-8 flex items-center gap-3 select-none opacity-45"><div class="flex-1 border-t border-dashed border-current"></div><span class="text-[11px] font-mono uppercase tracking-wider">Page Break</span><div class="flex-1 border-t border-dashed border-current"></div></div>'
+      const blockHtml =
+        '<div data-latex-atom="true" class="my-8 flex items-center gap-3 select-none opacity-45"><div class="flex-1 border-t border-dashed border-current"></div><span class="text-[11px] font-mono uppercase tracking-wider">Page Break</span><div class="flex-1 border-t border-dashed border-current"></div></div>';
+      chunks.push(blockHtml);
+      pushPreviewBlock(
+        ctx,
+        collectBlocks,
+        bodyStartOffset,
+        blockStart,
+        cursor,
+        'divider',
+        'Page Break',
+        blockHtml
       );
       continue;
     }
     if (body.startsWith('\\hrule', cursor)) {
       cursor += '\\hrule'.length;
-      chunks.push('<hr class="my-5 border-black/15 dark:border-white/15" />');
+      const blockHtml = '<hr data-latex-atom="true" class="my-5 border-black/15 dark:border-white/15" />';
+      chunks.push(blockHtml);
+      pushPreviewBlock(
+        ctx,
+        collectBlocks,
+        bodyStartOffset,
+        blockStart,
+        cursor,
+        'divider',
+        'Horizontal Rule',
+        blockHtml
+      );
       continue;
     }
 
-    // Consume plain text until next block token or blank line
+    // Consume plain text until next block token
     let nextToken = body.length;
     const candidates = [
       body.indexOf('\\begin{', cursor + 1),
@@ -1138,13 +1479,33 @@ function renderBlock(body: string, ctx: RenderContext, inlineSingleParagraph = f
       nextToken = Math.min(...candidates);
     }
 
+    const segmentStart = cursor;
     const segment = body.slice(cursor, nextToken);
     cursor = nextToken;
 
-    const paragraphs = segment.split(/\n\s*\n/);
-    for (const para of paragraphs) {
-      const trimmed = para.trim();
-      if (!trimmed) continue;
+    // Split segment by blank lines while preserving character spans for each paragraph
+    const paraRanges: Array<{ start: number; end: number }> = [];
+    const blankSepRegex = /\n\s*\n/g;
+    let lastEnd = 0;
+    let sepMatch: RegExpExecArray | null;
+    while ((sepMatch = blankSepRegex.exec(segment)) !== null) {
+      paraRanges.push({ start: lastEnd, end: sepMatch.index });
+      lastEnd = sepMatch.index + sepMatch[0].length;
+    }
+    paraRanges.push({ start: lastEnd, end: segment.length });
+
+    const nonEmptyParas = paraRanges
+      .map((r) => {
+        let s = r.start;
+        let e = r.end;
+        while (s < e && /\s/.test(segment[s])) s++;
+        while (e > s && /\s/.test(segment[e - 1])) e--;
+        return { start: s, end: e, text: segment.slice(s, e) };
+      })
+      .filter((p) => p.text.length > 0);
+
+    for (const para of nonEmptyParas) {
+      const trimmed = para.text;
       // Ignore stray preamble-like commands if no \begin{document} was used
       if (
         /^\\(documentclass|usepackage|newcommand|renewcommand|DeclareMathOperator|title|author|date|pagestyle)\b/.test(
@@ -1155,11 +1516,21 @@ function renderBlock(body: string, ctx: RenderContext, inlineSingleParagraph = f
       }
       const rendered = renderInline(trimmed, ctx);
       if (rendered.trim()) {
-        if (inlineSingleParagraph && paragraphs.length === 1) {
-          chunks.push(rendered);
-        } else {
-          chunks.push(`<p class="my-2.5">${rendered}</p>`);
-        }
+        const blockHtml =
+          inlineSingleParagraph && nonEmptyParas.length === 1
+            ? rendered
+            : `<p class="my-2.5">${rendered}</p>`;
+        chunks.push(blockHtml);
+        pushPreviewBlock(
+          ctx,
+          collectBlocks,
+          bodyStartOffset,
+          segmentStart + para.start,
+          segmentStart + para.end,
+          'paragraph',
+          'Paragraph',
+          blockHtml
+        );
       }
     }
   }
@@ -1171,17 +1542,19 @@ export function parseLatexDocument(
   rawSource: string,
   options: ParseOptions = {}
 ): ParsedLaTeXResult {
-  const cleanSource = stripComments(rawSource);
+  const cleanSource = maskCommentsPreserveLength(rawSource);
   const preamble = extractPreamble(cleanSource);
   const body = cleanSource.slice(preamble.bodyStartIndex, preamble.bodyEndIndex);
 
   const ctx: RenderContext = {
+    rawSource,
     macros: preamble.macros,
     diagnostics: [],
     labels: new Map(),
     citations: new Map(),
     footnotes: [],
     outline: [],
+    blocks: [],
     sectionCounters: [0, 0, 0],
     equationCounter: 0,
     theoremCounters: {},
@@ -1190,16 +1563,27 @@ export function parseLatexDocument(
 
   preScanLabels(body, ctx);
 
-  let html = renderBlock(body, ctx);
+  let html = renderBlock(body, ctx, false, preamble.bodyStartIndex, true);
 
   // Inject \maketitle
-  const titleHtml = preamble.title
+  const hasMakeTitle = ctx.blocks.some((b) => b.kind === 'title');
+  const hasAnyHeaderMeta = Boolean(preamble.title || preamble.author || preamble.date);
+  const titleHtml = hasAnyHeaderMeta
     ? `<header class="text-center mb-8 pb-6 border-b border-black/10 dark:border-white/10">
-        <h1 class="text-[1.9em] font-bold tracking-tight leading-tight">${renderInline(preamble.title, ctx)}</h1>
-        ${preamble.author ? `<div class="mt-2.5 text-[1.02em] opacity-85">${renderInline(preamble.author, ctx)}</div>` : ''}
-        ${preamble.date ? `<div class="mt-1 text-[0.9em] opacity-65">${renderInline(preamble.date, ctx)}</div>` : ''}
+        ${
+          preamble.title
+            ? `<h1 data-header-field="title" class="text-[1.9em] font-bold tracking-tight leading-tight">${renderInline(preamble.title, ctx)}</h1>`
+            : `<h1 data-header-field="title" data-preview-empty="true" class="text-[1.45em] font-semibold italic opacity-45">Untitled Header</h1>`
+        }
+        ${preamble.author ? `<div data-header-field="author" class="mt-2.5 text-[1.02em] opacity-85">${renderInline(preamble.author, ctx)}</div>` : ''}
+        ${preamble.date ? `<div data-header-field="date" class="mt-1 text-[0.9em] opacity-65">${renderInline(preamble.date, ctx)}</div>` : ''}
       </header>`
-    : '';
+    : hasMakeTitle
+      ? `<header class="text-center mb-8 pb-6 border-b border-dashed border-black/15 dark:border-white/15 print:hidden">
+          <div data-header-field="title" data-preview-empty="true" class="text-[1.25em] font-semibold tracking-tight opacity-45">Document Header</div>
+          <div data-header-field="author" data-preview-empty="true" class="mt-1 text-[0.82em] opacity-45">Click to set header title, description, and date</div>
+        </header>`
+      : '';
 
   html = html.replace('__SCRIBETEX_MAKETITLE__', titleHtml);
 
@@ -1226,6 +1610,19 @@ export function parseLatexDocument(
 
   html = html.replace('__SCRIBETEX_TOC__', tocHtml);
 
+  // Resolve placeholders inside PreviewBlock list
+  const resolvedBlocks = ctx.blocks
+    .map((block) => {
+      if (block.html === '__SCRIBETEX_MAKETITLE__') {
+        return titleHtml ? { ...block, html: titleHtml } : null;
+      }
+      if (block.html === '__SCRIBETEX_TOC__') {
+        return tocHtml ? { ...block, html: tocHtml } : null;
+      }
+      return block;
+    })
+    .filter((b): b is PreviewBlock => Boolean(b));
+
   // Append footnotes if present
   if (ctx.footnotes.length > 0) {
     html += `<footer class="mt-10 pt-4 border-t border-black/15 dark:border-white/15 text-[0.85em] space-y-1 opacity-85">
@@ -1244,6 +1641,7 @@ export function parseLatexDocument(
 
   return {
     html,
+    blocks: resolvedBlocks,
     outline: ctx.outline,
     diagnostics: ctx.diagnostics,
     wordCount,

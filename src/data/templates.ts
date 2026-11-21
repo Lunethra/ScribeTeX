@@ -3,14 +3,29 @@ import type { LaTeXDocument } from '../types/editor';
 export interface DocumentTemplate {
   id: string;
   name: string;
+  topic: string;
   description: string;
   content: string;
 }
+
+export const BLANK_DOCUMENT_CONTENT = `\\documentclass{article}
+\\title{}
+\\author{}
+\\date{}
+
+\\begin{document}
+\\maketitle
+
+\\section{}
+
+\\end{document}
+`;
 
 export const DOCUMENT_TEMPLATES: DocumentTemplate[] = [
   {
     id: 'variational-calculus',
     name: 'Variational Calculus & Spectral Analysis',
+    topic: 'Pure Mathematics',
     description: 'Academic paper with theorems, proofs, aligned equations, and tables.',
     content: `\\documentclass[11pt,a4paper]{article}
 \\title{Variational Principles in Spectral Geometry}
@@ -93,6 +108,7 @@ Ellipsoid ($a=1, b=1.5$) & $+0.44$ & $6.4120$ & $7.1842$ \\\\
   {
     id: 'linear-algebra',
     name: 'Linear Algebra & Matrix Decomposition',
+    topic: 'Linear Algebra',
     description: 'Matrix notations, SVD, eigenvalues, and piecewise functions.',
     content: `\\documentclass{article}
 \\title{Singular Value Decomposition \\& Matrix Norms}
@@ -138,6 +154,7 @@ In low-rank matrix recovery, singular values are shrunk via the proximal operato
   {
     id: 'physics-quantum',
     name: 'Quantum Mechanics & Electrodynamics',
+    topic: 'Physics',
     description: 'Dirac bra-ket notation, Maxwell equations, and Schrödinger wave equation.',
     content: `\\documentclass{article}
 \\title{Foundations of Quantum Dynamics}
@@ -169,18 +186,297 @@ In natural units ($\\hbar = c = 1$), the fine-structure constant is $\\alpha = \
 `,
   },
   {
-    id: 'blank',
-    name: 'Blank Document',
-    description: 'Start fresh with a basic empty header and base section.',
+    id: 'probability-statistics',
+    name: 'Probability & Bayesian Inference',
+    topic: 'Statistics',
+    description: 'Bayes rule, Gaussian likelihoods, conjugate priors, and estimators.',
     content: `\\documentclass{article}
-\\title{}
-\\author{}
-\\date{}
+\\title{Bayesian Parameter Estimation \\& Posterior Inference}
+\\author{Department of Statistics}
+\\date{\\today}
 
 \\begin{document}
 \\maketitle
 
-\\section{}
+\\section{Bayes' Theorem}
+Given observed data $\\mathcal{D} = \\{x_1, \\dots, x_n\\}$ and parameter vector $\\theta \\in \\Theta$, the posterior distribution updates prior beliefs via:
+\\begin{equation}
+p(\\theta \\mid \\mathcal{D}) = \\frac{p(\\mathcal{D} \\mid \\theta)\\, p(\\theta)}{\\int_{\\Theta} p(\\mathcal{D} \\mid \\theta')\\, p(\\theta')\\,\\mathrm{d}\\theta'}
+\\end{equation}
+
+\\section{Conjugate Normal-Normal Model}
+Suppose $x_i \\sim \\mathcal{N}(\\mu, \\sigma^2)$ with known variance $\\sigma^2$ and prior $\\mu \\sim \\mathcal{N}(\\mu_0, \\tau_0^2)$. The posterior parameters obey:
+\\begin{align}
+\\frac{1}{\\tau_n^2} &= \\frac{1}{\\tau_0^2} + \\frac{n}{\\sigma^2} \\\\
+\\mu_n &= \\tau_n^2 \\left( \\frac{\\mu_0}{\\tau_0^2} + \\frac{n\\bar{x}}{\\sigma^2} \\right)
+\\end{align}
+
+\\begin{itemize}
+  \\item Posterior mean $\\mu_n$ interpolates between prior mean $\\mu_0$ and sample average $\\bar{x}$.
+  \\item As $n \\to \\infty$, posterior variance $\\tau_n^2 \\to 0$ and concentrates around the MLE.
+\\end{itemize}
+
+\\end{document}
+`,
+  },
+  {
+    id: 'machine-learning',
+    name: 'Deep Learning & Attention Mechanics',
+    topic: 'Machine Learning',
+    description: 'Cross-entropy objectives, gradient updates, and scaled dot-product attention.',
+    content: `\\documentclass{article}
+\\title{Optimization \\& Self-Attention in Neural Architectures}
+\\author{Machine Intelligence Lab}
+\\date{\\today}
+
+\\begin{document}
+\\maketitle
+
+\\section{Scaled Dot-Product Attention}
+Given query matrix $Q \\in \\mathbb{R}^{n \\times d_k}$, key matrix $K \\in \\mathbb{R}^{m \\times d_k}$, and value matrix $V \\in \\mathbb{R}^{m \\times d_v}$, attention weights are computed as:
+\\begin{equation}
+\\mathrm{Attention}(Q, K, V) = \\mathrm{softmax}\\left(\\frac{Q K^\\top}{\\sqrt{d_k}}\\right) V
+\\end{equation}
+
+\\section{Empirical Risk & Gradient Updates}
+For a mini-batch $\\mathcal{B}$ of size $B$, the cross-entropy loss and momentum update take the form:
+\\begin{align}
+\\mathcal{L}(\\theta) &= -\\frac{1}{B} \\sum_{(x, y) \\in \\mathcal{B}} \\sum_{c=1}^{C} y_c \\log \\hat{p}_\\theta(c \\mid x) \\\\
+v_{t+1} &= \\beta v_t + \\nabla_\\theta \\mathcal{L}(\\theta_t), \\quad \\theta_{t+1} = \\theta_t - \\eta v_{t+1}
+\\end{align}
+
+\\end{document}
+`,
+  },
+  {
+    id: 'algorithms-complexity',
+    name: 'Algorithms & Complexity Analysis',
+    topic: 'Computer Science',
+    description: 'Master theorem cases, recurrence bounds, and asymptotic runtime table.',
+    content: `\\documentclass{article}
+\\title{Divide-and-Conquer Recurrences \\& Asymptotic Bounds}
+\\author{Algorithms Research Group}
+\\date{\\today}
+
+\\begin{document}
+\\maketitle
+
+\\section{The Master Theorem}
+Let $T(n) = a\\, T(n/b) + f(n)$ with $a \\geq 1$ and $b > 1$. Comparing $f(n)$ against the watershed $n^{\\log_b a}$ gives three regimes:
+\\begin{equation}
+T(n) = \\begin{cases}
+\\Theta(n^{\\log_b a}), & f(n) = O(n^{\\log_b a - \\varepsilon}) \\\\
+\\Theta(n^{\\log_b a} \\log n), & f(n) = \\Theta(n^{\\log_b a}) \\\\
+\\Theta(f(n)), & f(n) = \\Omega(n^{\\log_b a + \\varepsilon})
+\\end{cases}
+\\end{equation}
+
+\\section{Common Complexity Benchmarks}
+\\begin{center}
+\\begin{tabular}{l c r}
+\\hline
+\\textbf{Algorithm} & \\textbf{Average Time} & \\textbf{Space} \\\\
+\\hline
+Merge Sort & $O(n \\log n)$ & $O(n)$ \\\\
+Binary Search & $O(\\log n)$ & $O(1)$ \\\\
+Dijkstra (Binary Heap) & $O((V + E) \\log V)$ & $O(V)$ \\\\
+\\hline
+\\end{tabular}
+\\end{center}
+
+\\end{document}
+`,
+  },
+  {
+    id: 'organic-thermodynamics',
+    name: 'Chemical Thermodynamics & Kinetics',
+    topic: 'Chemistry',
+    description: 'Gibbs free energy, equilibrium constants, and Arrhenius reaction rates.',
+    content: `\\documentclass{article}
+\\title{Thermodynamic Equilibrium \\& Reaction Kinetics}
+\\author{Physical Chemistry Division}
+\\date{\\today}
+
+\\begin{document}
+\\maketitle
+
+\\section{Gibbs Free Energy & Equilibrium}
+At constant temperature $T$ and pressure $P$, spontaneity of a chemical process is governed by the change in Gibbs free energy $\\Delta G$:
+\\begin{align}
+\\Delta G &= \\Delta H - T \\Delta S \\\\
+\\Delta G^\\circ &= -R T \\ln K_{\\mathrm{eq}}
+\\end{align}
+where $R = 8.314\\,\\mathrm{J\\,mol^{-1}\\,K^{-1}}$ is the universal gas constant.
+
+\\section{Arrhenius Rate Law}
+The temperature dependence of the forward rate constant $k(T)$ follows:
+\\begin{equation}
+k(T) = A \\exp\\left( -\\frac{E_a}{R T} \\right)
+\\end{equation}
+
+\\begin{itemize}
+  \\item $\\Delta G < 0$: exergonic and thermodynamically favorable.
+  \\item Lowering activation energy $E_a$ via catalysis increases $k(T)$ exponentially.
+\\end{itemize}
+
+\\end{document}
+`,
+  },
+  {
+    id: 'macroeconomics-game-theory',
+    name: 'Game Theory & Macroeconomic Growth',
+    topic: 'Economics',
+    description: 'Nash equilibrium, Solow-Swan growth dynamics, and consumer utility.',
+    content: `\\documentclass{article}
+\\title{Strategic Equilibria \\& Dynamic Growth Models}
+\\author{Quantitative Economics Review}
+\\date{\\today}
+
+\\begin{document}
+\\maketitle
+
+\\section{Nash Equilibrium Condition}
+In a finite $N$-player game with strategy profiles $s = (s_i, s_{-i})$, a profile $s^*$ is a Nash equilibrium if no player gains by unilateral deviation:
+\\begin{equation}
+u_i(s_i^*, s_{-i}^*) \\geq u_i(s_i, s_{-i}^*) \\quad \\forall s_i \\in S_i, \\; \\forall i \\in \\{1, \\dots, N\\}
+\\end{equation}
+
+\\section{Solow--Swan Capital Accumulation}
+With savings rate $s \\in (0, 1)$, depreciation $\\delta$, and labor growth rate $n$, capital per worker $k_t$ evolves via:
+\\begin{equation}
+\\dot{k} = s f(k) - (n + \\delta) k
+\\end{equation}
+Steady-state equilibrium $k^*$ occurs where $s f(k^*) = (n + \\delta) k^*$.
+
+\\end{document}
+`,
+  },
+  {
+    id: 'signal-processing',
+    name: 'Signal Processing & Fourier Analysis',
+    topic: 'Engineering',
+    description: 'Fourier transforms, Nyquist sampling, Parseval identity, and convolutions.',
+    content: `\\documentclass{article}
+\\title{Continuous \\& Discrete Fourier Methods in Signal Processing}
+\\author{Communications Engineering Group}
+\\date{\\today}
+
+\\begin{document}
+\\maketitle
+
+\\section{Fourier Transform Pair}
+For an integrable signal $x(t) \\in L^1(\\mathbb{R})$, its frequency spectrum $X(\\omega)$ and synthesis integral are given by:
+\\begin{align}
+X(\\omega) &= \\int_{-\\infty}^{\\infty} x(t)\\, e^{-i \\omega t}\\,\\mathrm{d}t \\\\
+x(t) &= \\frac{1}{2\\pi} \\int_{-\\infty}^{\\infty} X(\\omega)\\, e^{i \\omega t}\\,\\mathrm{d}\\omega
+\\end{align}
+
+\\section{Parseval's Energy Identity}
+Total signal energy is preserved between the time and frequency domains:
+\\begin{equation}
+\\int_{-\\infty}^{\\infty} |x(t)|^2 \\,\\mathrm{d}t = \\frac{1}{2\\pi} \\int_{-\\infty}^{\\infty} |X(\\omega)|^2 \\,\\mathrm{d}\\omega
+\\end{equation}
+
+\\end{document}
+`,
+  },
+  {
+    id: 'computational-biology',
+    name: 'Enzyme Kinetics & Population Dynamics',
+    topic: 'Biology',
+    description: 'Michaelis-Menten rate law, logistic growth, and Lotka-Volterra systems.',
+    content: `\\documentclass{article}
+\\title{Mathematical Models in Cellular \\& Population Biology}
+\\author{Systems Biology Institute}
+\\date{\\today}
+
+\\begin{document}
+\\maketitle
+
+\\section{Michaelis--Menten Enzyme Kinetics}
+The initial reaction velocity $v_0$ as a function of substrate concentration $[S]$ obeys:
+\\begin{equation}
+v_0 = \\frac{V_{\\max} [S]}{K_m + [S]}
+\\end{equation}
+where $K_m$ denotes the substrate concentration at half-maximal velocity $\\frac{1}{2} V_{\\max}$.
+
+\\section{Predator--Prey Dynamics}
+The Lotka--Volterra coupled differential system describes prey $x(t)$ and predator $y(t)$ populations:
+\\begin{align}
+\\frac{\\mathrm{d}x}{\\mathrm{d}t} &= \\alpha x - \\beta x y \\\\
+\\frac{\\mathrm{d}y}{\\mathrm{d}t} &= \\delta x y - \\gamma y
+\\end{align}
+
+\\end{document}
+`,
+  },
+  {
+    id: 'academic-cv',
+    name: 'Academic Curriculum Vitae & Resume',
+    topic: 'Career & CV',
+    description: 'Structured CV with Education, Research Experience, Publications, and Skills.',
+    content: `\\documentclass{article}
+\\title{Jordan Mercer — Curriculum Vitae}
+\\author{jordan.mercer@university.edu · Cambridge, MA}
+\\date{Updated November 2026}
+
+\\begin{document}
+\\maketitle
+
+\\section{Education}
+\\begin{itemize}
+  \\item \\textbf{Ph.D. in Computational Science}, Massachusetts Institute — Expected 2027. Focus on numerical PDEs and scientific computing.
+  \\item \\textbf{B.S. in Mathematics \\& Physics}, State University — 2022, Summa Cum Laude.
+\\end{itemize}
+
+\\section{Research Experience}
+\\subsection{Graduate Research Fellow (2023--Present)}
+Developed finite-element solvers for coupled fluid-structure interactions, achieving $3.4\\times$ speedup on multi-GPU clusters.
+
+\\section{Selected Publications}
+\\begin{enumerate}
+  \\item J. Mercer and E. Vance, \\emph{Adaptive Mesh Refinement for Spectral Operators}, Journal of Computational Physics, 2025.
+  \\item J. Mercer, \\emph{Preconditioned Krylov Solvers on Curved Domains}, SIAM Scientific Computing, 2024.
+\\end{enumerate}
+
+\\section{Technical Skills}
+\\textbf{Languages:} TypeScript, Python, C++, Julia · \\textbf{Tools:} LaTeX, PyTorch, MPI, Git.
+
+\\end{document}
+`,
+  },
+  {
+    id: 'homework-problem-set',
+    name: 'Homework & Problem Set Sheet',
+    topic: 'Education',
+    description: 'Formatted assignment with numbered problems, subparts, and proof boxes.',
+    content: `\\documentclass{article}
+\\title{MATH 301 — Problem Set 4}
+\\author{Student Name: Alex Rivera · ID: 402918}
+\\date{Due Date: \\today}
+
+\\begin{document}
+\\maketitle
+
+\\section{Problem 1: Series Convergence}
+Determine whether the infinite series converges or diverges:
+\\[
+\\sum_{n=1}^{\\infty} \\frac{n^2 + 1}{2^n}
+\\]
+
+\\subsection{Solution}
+Applying the Ratio Test with $a_n = \\frac{n^2 + 1}{2^n}$:
+\\begin{align}
+L &= \\lim_{n \\to \\infty} \\left| \\frac{a_{n+1}}{a_n} \\right| = \\lim_{n \\to \\infty} \\frac{(n+1)^2 + 1}{2(n^2 + 1)} = \\frac{1}{2} < 1
+\\end{align}
+Since $L < 1$, the series converges absolutely.
+
+\\section{Problem 2: Eigenvalues of Symmetric Matrices}
+Show that all eigenvalues of a real symmetric matrix $A = A^\\top$ are real.
+
+\\begin{proof}
+Suppose $Av = \\lambda v$ with $v \\neq 0$. Taking the Hermitian inner product gives $\\lambda \\langle v, v \\rangle = \\langle Av, v \\rangle = \\langle v, A^\\top v \\rangle = \\overline{\\lambda} \\langle v, v \\rangle$, hence $\\lambda = \\overline{\\lambda} \\in \\mathbb{R}$.
+\\end{proof}
 
 \\end{document}
 `,

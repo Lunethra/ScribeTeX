@@ -58,6 +58,7 @@ export interface EditorSettings {
 
 export type SymbolCategoryId =
   | 'favorites'
+  | 'document'
   | 'greek'
   | 'operators'
   | 'calculus'
@@ -67,7 +68,8 @@ export type SymbolCategoryId =
   | 'accents'
   | 'matrices'
   | 'functions'
-  | 'structure';
+  | 'structure'
+  | 'mathblocks';
 
 export interface SymbolItem {
   id: string;
@@ -96,8 +98,29 @@ export interface CompileDiagnostic {
   severity: 'error' | 'warning';
 }
 
+export type PreviewBlockKind =
+  | 'title'
+  | 'toc'
+  | 'heading'
+  | 'math'
+  | 'environment'
+  | 'paragraph'
+  | 'divider';
+
+export interface PreviewBlock {
+  id: string;
+  kind: PreviewBlockKind;
+  label: string;
+  html: string;
+  startOffset: number;
+  endOffset: number;
+  rawLatex: string;
+  headingId?: string;
+}
+
 export interface ParsedLaTeXResult {
   html: string;
+  blocks: PreviewBlock[];
   outline: OutlineHeading[];
   diagnostics: CompileDiagnostic[];
   wordCount: number;

@@ -28,8 +28,10 @@ export const DEFAULT_SETTINGS: EditorSettings = {
   syncScroll: true,
   compileMode: 'instant',
   showKeyboard: true,
-  showOutline: false,
+  showOutline: true,
 };
+
+const SIDEBAR_DEFAULT_MIGRATION_KEY = 'scribetex:migrated:sidebar-default-v1';
 
 export function usePersistentState<T>(key: string, defaultValue: T) {
   const [state, setState] = useState<T>(() => {
@@ -42,7 +44,15 @@ export function usePersistentState<T>(key: string, defaultValue: T) {
         defaultValue !== null &&
         !Array.isArray(defaultValue)
       ) {
-        return { ...defaultValue, ...parsed };
+        const merged = { ...defaultValue, ...parsed };
+        if (
+          key === 'scribetex:settings:v1' &&
+          !window.localStorage.getItem(SIDEBAR_DEFAULT_MIGRATION_KEY)
+        ) {
+          window.localStorage.setItem(SIDEBAR_DEFAULT_MIGRATION_KEY, '1');
+          return { ...merged, showOutline: true };
+        }
+        return merged;
       }
       return parsed;
     } catch {
